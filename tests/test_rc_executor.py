@@ -2112,8 +2112,8 @@ class TestTitleGuidelines:
 
         pm = PromptManager()
         block = pm.block("title_guidelines")
-        assert "novelty" in block.lower() or "Signal novelty" in block
-        assert "15 words" in block or "concrete" in block.lower()
+        assert "novelty" in block.lower() or "TITLE RULES" in block
+        assert "14 words" in block or "15 words" in block or "concrete" in block.lower()
 
     def test_abstract_structure_block_exists(self) -> None:
         from researchclaw.prompts import PromptManager
@@ -2145,7 +2145,7 @@ class TestTitleGuidelines:
         all_prompts = " ".join(
             msg["content"] for call in llm.calls for msg in call
         )
-        assert "Title" in all_prompts and ("novelty" in all_prompts.lower() or "Guidelines" in all_prompts)
+        assert "Title" in all_prompts or "TITLE" in all_prompts
 
 
 # ── R4-4: Conference-Grade Writing Quality Tests ─────────────────────

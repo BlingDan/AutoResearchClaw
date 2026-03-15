@@ -1121,6 +1121,44 @@ Derived from `goal.md` for topic: {config.research.topic}
 {_utcnow_iso()}
 """
     (stage_dir / "problem_tree.md").write_text(body, encoding="utf-8")
+
+    # IMP-35: Topic/title quality pre-evaluation
+    # Quick LLM check: is the topic well-scoped for a conference paper?
+    if llm is not None:
+        try:
+            _eval_resp = llm.chat(
+                [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Evaluate this research topic for a top ML conference paper. "
+                            "Score 1-10 on: (a) novelty, (b) specificity, (c) feasibility. "
+                            "If overall score < 5, suggest a refined topic.\n\n"
+                            f"Topic: {config.research.topic}\n\n"
+                            "Reply as JSON: {\"novelty\": N, \"specificity\": N, "
+                            "\"feasibility\": N, \"overall\": N, \"suggestion\": \"...\"}"
+                        ),
+                    }
+                ],
+                system="You are a senior ML researcher evaluating research topic quality.",
+            )
+            _eval_data = _safe_json_loads(_eval_resp.content, {})
+            if isinstance(_eval_data, dict):
+                overall = _eval_data.get("overall", 10)
+                if isinstance(overall, (int, float)) and overall < 5:
+                    logger.warning(
+                        "IMP-35: Topic quality score %s/10 — consider refining: %s",
+                        overall,
+                        _eval_data.get("suggestion", ""),
+                    )
+                else:
+                    logger.info("IMP-35: Topic quality score %s/10", overall)
+                (stage_dir / "topic_evaluation.json").write_text(
+                    json.dumps(_eval_data, indent=2), encoding="utf-8"
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("IMP-35: Topic evaluation skipped (non-blocking)")
+
     return StageResult(
         stage=Stage.PROBLEM_DECOMPOSE,
         status=StageStatus.DONE,
@@ -4067,6 +4105,11 @@ def _execute_paper_outline(
 
     if llm is not None:
         _pm = prompts or PromptManager()
+        # IMP-20: Pass academic style guide block for outline stage
+        try:
+            _asg = _pm.block("academic_style_guide")
+        except (KeyError, Exception):
+            _asg = ""
         sp = _pm.for_stage(
             "paper_outline",
             preamble=preamble,
@@ -4074,6 +4117,7 @@ def _execute_paper_outline(
             feedback=feedback,
             analysis=analysis,
             decision=decision,
+            academic_style_guide=_asg,
         )
         resp = _chat_with_prompt(
             llm,
@@ -4276,19 +4320,43 @@ def _write_paper_sections(
     except (KeyError, Exception):  # noqa: BLE001
         abstract_structure = ""
 
+    # IMP-20/25/31/24: Academic style, narrative, anti-hedging, anti-repetition
+    try:
+        academic_style_guide = pm.block("academic_style_guide")
+    except (KeyError, Exception):  # noqa: BLE001
+        academic_style_guide = ""
+    try:
+        narrative_writing_rules = pm.block("narrative_writing_rules")
+    except (KeyError, Exception):  # noqa: BLE001
+        narrative_writing_rules = ""
+    try:
+        anti_hedging_rules = pm.block("anti_hedging_rules")
+    except (KeyError, Exception):  # noqa: BLE001
+        anti_hedging_rules = ""
+    try:
+        anti_repetition_rules = pm.block("anti_repetition_rules")
+    except (KeyError, Exception):  # noqa: BLE001
+        anti_repetition_rules = ""
+
     # --- Call 1: Title + Abstract + Introduction + Related Work ---
     call1_user = (
         f"{preamble}\n\n"
         f"{topic_constraint}"
         f"{citation_instruction}\n\n"
         f"{title_guidelines}\n\n"
+        f"{academic_style_guide}\n"
+        f"{narrative_writing_rules}\n"
+        f"{anti_hedging_rules}\n"
+        f"{anti_repetition_rules}\n\n"
         "Write the following sections of a NeurIPS/ICML-quality paper in markdown. "
         "Follow the LENGTH REQUIREMENTS strictly:\n\n"
-        "1. **Title** (10-15 words, follow Title Guidelines above)\n"
-        f"2. **Abstract** (150-250 words){abstract_structure}\n"
+        "1. **Title** (HARD RULE: MUST be 14 words or fewer. Create a catchy method name "
+        "first, then build the title: 'MethodName: Subtitle'. If your title exceeds 14 words, "
+        "it will be automatically rejected.)\n"
+        f"2. **Abstract** (180-220 words){abstract_structure}\n"
         "3. **Introduction** (800-1000 words): real-world motivation, problem statement, "
         "research gap analysis with citations, method overview, 3-4 contributions as bullet points, "
-        "paper organization paragraph\n"
+        "paper organization paragraph. MUST cite 8-12 references.\n"
         "4. **Related Work** (600-800 words): organized into 3-4 thematic subsections, each discussing "
         "4-5 papers with proper citations. Compare approaches, identify limitations, position this work.\n\n"
         f"Outline:\n{outline}\n\n"
@@ -4312,15 +4380,26 @@ def _write_paper_sections(
         f"{preamble}\n\n"
         f"{topic_constraint}"
         f"{exp_metrics_instruction}\n\n"
+        f"{narrative_writing_rules}\n"
+        f"{anti_hedging_rules}\n\n"
+        # IMP-21: Citation instruction for Method + Experiments
+        "CITATION REQUIREMENT: The Method section MUST cite at least 3-5 related "
+        "technical papers (foundations your method builds on). The Experiments section "
+        "MUST cite baseline method papers. Use [cite_key] syntax.\n"
+        f"{citation_instruction}\n\n"
         "You are continuing a paper. The sections written so far are:\n\n"
         f"---\n{part1}\n---\n\n"
         "Now write the next sections, maintaining consistency with the above:\n\n"
         "5. **Method** (1000-1500 words): formal problem definition with mathematical notation "
         "($x$, $\\theta$, etc.), detailed algorithm description with equations, step-by-step procedure, "
-        "complexity analysis, design rationale for key choices. Include algorithm pseudocode if applicable.\n"
+        "complexity analysis, design rationale for key choices. Include algorithm pseudocode if applicable. "
+        "Write as FLOWING PROSE — do NOT use bullet-point lists for method components.\n"
         "6. **Experiments** (800-1200 words): detailed experimental setup, datasets with statistics "
         "(size, splits, features), all baselines and their implementations, hyperparameter settings "
-        "in a markdown table, evaluation metrics with mathematical definitions, hardware and runtime info.\n\n"
+        "in a markdown table, evaluation metrics with mathematical definitions, hardware and runtime info.\n"
+        "METHOD NAMES IN TABLES: Use SHORT abbreviations (4-8 chars) for method names "
+        "in tables. Define abbreviation mappings in a footnote. "
+        "NEVER put method names longer than 20 characters in table cells.\n\n"
         f"Outline:\n{outline}\n\n"
         "Output markdown with ## headers. Continue from where Part 1 ended."
     )
@@ -4334,27 +4413,34 @@ def _write_paper_sections(
         f"{preamble}\n\n"
         f"{topic_constraint}"
         f"{exp_metrics_instruction}\n\n"
+        f"{narrative_writing_rules}\n"
+        f"{anti_hedging_rules}\n"
+        f"{anti_repetition_rules}\n\n"
+        # IMP-21: Citation instruction for Results + Discussion + Conclusion
+        "CITATION REQUIREMENT: The Discussion section MUST cite at least 3-5 papers "
+        "when comparing findings with prior work. The Conclusion may cite 1-2 "
+        "foundational references.\n"
+        f"{citation_instruction}\n\n"
         "You are completing a paper. The sections written so far are:\n\n"
         f"---\n{part1}\n\n{part2}\n---\n\n"
         "Now write the final sections, maintaining consistency:\n\n"
         "7. **Results** (600-800 words):\n"
         "   - START with an AGGREGATED results table (Table 1): rows = methods, columns = metrics.\n"
         "     Each cell = mean ± std across seeds. Bold the best value per column.\n"
-        "     Example format:\n"
-        "     | Method | Primary (↑) | Secondary (↑) | Success Rate |\n"
-        "     |--------|------------|---------------|-------------|\n"
-        "     | Random Search | 0.75 ± 0.12 | 0.60 ± 0.15 | 100% |\n"
+        "     EVERY table MUST have a descriptive caption that allows understanding without "
+        "     reading the main text. NEVER use just 'Table 1' as a caption.\n"
         "   - Follow with a PER-REGIME table (Table 2) breaking down by easy/hard regimes.\n"
         "   - Include a STATISTICAL COMPARISON table (Table 3): paired t-tests between key methods.\n"
-        "     | Comparison | Δ Mean | t-stat | p-value | Sig. |\n"
         "   - NEVER dump raw per-seed numbers in the main text. Aggregate first, then discuss.\n"
-        "   - Per-condition analysis, ablation study results, comparison with baselines.\n"
+        "   - MUST include at least 2 figures using markdown image syntax: ![Caption](charts/filename.png)\n"
+        "     One figure MUST be a performance comparison chart. Figures MUST be referenced "
+        "     in text: 'As shown in Figure 1, ...'\n"
         "8. **Discussion** (400-600 words): interpretation of key findings, unexpected results, "
-        "comparison with prior work, practical implications.\n"
-        "9. **Limitations** (200-300 words): honest assessment of scope, dataset, methodology, "
-        "and generalizability.\n"
-        "10. **Conclusion** (200-300 words): summary of contributions, main findings, concrete "
-        "future work with specific research directions.\n\n"
+        "comparison with prior work (CITE 3-5 papers here!), practical implications.\n"
+        "9. **Limitations** (200-300 words): honest assessment of scope, dataset, methodology. "
+        "ALL caveats consolidated HERE — nowhere else in the paper.\n"
+        "10. **Conclusion** (200-300 words): summary of contributions (NO number repetition from "
+        "Results), main findings, concrete future work with specific research directions.\n\n"
         "Output markdown with ## headers. Do NOT include a References section."
     )
     resp3 = _chat_with_prompt(llm, system, call3_user, max_tokens=_paper_max_tokens)
@@ -5277,12 +5363,21 @@ def _execute_paper_revision(
             _ws_revision = _pm.block("writing_structure")
         except (KeyError, Exception):  # noqa: BLE001
             _ws_revision = ""
+        # IMP-20/25/31/24: Load style blocks for revision prompt
+        _rev_blocks: dict[str, str] = {}
+        for _bname in ("academic_style_guide", "narrative_writing_rules",
+                        "anti_hedging_rules", "anti_repetition_rules"):
+            try:
+                _rev_blocks[_bname] = _pm.block(_bname)
+            except (KeyError, Exception):  # noqa: BLE001
+                _rev_blocks[_bname] = ""
         sp = _pm.for_stage(
             "paper_revision",
             topic_constraint=_pm.block("topic_constraint", topic=config.research.topic),
             writing_structure=_ws_revision,
             draft=draft,
             reviews=reviews + data_integrity_revision,
+            **_rev_blocks,
         )
         # R10-Fix2: Ensure max_tokens is sufficient for full paper revision
         revision_max_tokens = sp.max_tokens
@@ -5386,10 +5481,13 @@ def _execute_quality_gate(
     report: dict[str, Any] | None = None
     if llm is not None:
         _pm = prompts or PromptManager()
+        # IMP-33: Evaluate the full paper instead of truncating to 12K chars.
+        # Split into chunks if very long, but prefer sending the full text.
+        paper_for_eval = revised[:40000] if len(revised) > 40000 else revised
         sp = _pm.for_stage(
             "quality_gate",
             quality_threshold=str(config.research.quality_threshold),
-            revised=revised[:12000],
+            revised=paper_for_eval,
         )
         resp = _chat_with_prompt(
             llm,
@@ -5536,6 +5634,42 @@ def _execute_export_publish(
             len(_matches) - 1,
         )
 
+    # IMP-19 Layer 2: Ensure at least figures are referenced in the paper
+    import re as _re_fig
+    chart_files = []
+    for _chart_src_dir in [stage_dir / "charts", run_dir / "stage-14" / "charts"]:
+        if _chart_src_dir.is_dir():
+            chart_files.extend(sorted(_chart_src_dir.glob("*.png")))
+    if chart_files and "![" not in final_paper:
+        figure_block = "\n\n"
+        for i, cf in enumerate(chart_files[:3], 1):
+            label = cf.stem.replace("_", " ").title()
+            figure_block += f"![Figure {i}: {label}](charts/{cf.name})\n\n"
+        # Insert before ## Conclusion or ## Limitations or ## Discussion
+        _fig_inserted = False
+        for marker in ["## Conclusion", "## Limitations", "## Discussion"]:
+            if marker in final_paper:
+                final_paper = final_paper.replace(marker, figure_block + marker, 1)
+                _fig_inserted = True
+                break
+        if not _fig_inserted:
+            final_paper += figure_block
+        logger.info(
+            "IMP-19: Injected %d figure references into paper_final.md",
+            min(len(chart_files), 3),
+        )
+
+    # IMP-24: Detect excessive number repetition
+    _numbers_found = _re_fig.findall(r"\b\d+\.\d{2,}\b", final_paper)
+    from collections import Counter as _Counter
+    _num_counts = _Counter(_numbers_found)
+    _repeated = {n: c for n, c in _num_counts.items() if c > 3}
+    if _repeated:
+        logger.warning(
+            "IMP-24: Numbers repeated >3 times: %s",
+            _repeated,
+        )
+
     (stage_dir / "paper_final.md").write_text(final_paper, encoding="utf-8")
 
     # Initialize artifacts list
@@ -5560,10 +5694,14 @@ def _execute_export_publish(
                     len(invalid_keys),
                     ", ".join(sorted(invalid_keys)[:20]),
                 )
+                # IMP-29: Silently remove invalid citations instead of
+                # leaving ugly [?key:NOT_IN_BIB] markers in the output.
                 for bad_key in invalid_keys:
-                    final_paper = final_paper.replace(
-                        f"[{bad_key}]", f"[?{bad_key}:NOT_IN_BIB]"
-                    )
+                    final_paper = final_paper.replace(f"[{bad_key}]", "")
+                # Clean up whitespace artifacts from removed citations
+                import re as _re_imp29
+                final_paper = _re_imp29.sub(r"  +", " ", final_paper)
+                final_paper = _re_imp29.sub(r" ([.,;:)])", r"\1", final_paper)
                 (stage_dir / "paper_final.md").write_text(final_paper, encoding="utf-8")
                 (stage_dir / "invalid_citations.json").write_text(
                     json.dumps(sorted(invalid_keys), indent=2), encoding="utf-8"

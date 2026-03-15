@@ -56,6 +56,8 @@ RESEARCHCLAW_CLAUDE.md
 # Task-specific config files (keep example template only)
 config_agent_*.yaml
 config_case*.yaml
+config_v8_case*.yaml
+pipeline_run_*.log
 benchmarks/
 
 # Logo generation prompts

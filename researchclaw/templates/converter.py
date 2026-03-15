@@ -74,6 +74,9 @@ def markdown_to_latex(
     # Build body (everything except title/abstract headings)
     body = _build_body(sections, title=title)
 
+    # IMP-30: Detect and remove duplicate tables
+    body = _deduplicate_tables(body)
+
     # R10-Fix5: Completeness check
     completeness_warnings = check_paper_completeness(sections)
     if completeness_warnings:
@@ -535,6 +538,46 @@ def _build_body(sections: list[_Section], *, title: str = "") -> str:
     return "\n\n".join(parts) + "\n"
 
 
+def _deduplicate_tables(body: str) -> str:
+    """IMP-30: Remove duplicate tables that share the same header row.
+
+    LLMs sometimes repeat tables (e.g. same results table in Results and
+    Discussion). We keep the first occurrence and drop subsequent copies.
+    """
+    import logging as _dup_log
+
+    _TABLE_ENV_RE = re.compile(
+        r"(\\begin\{table\}.*?\\end\{table\})", re.DOTALL
+    )
+    tables = list(_TABLE_ENV_RE.finditer(body))
+    if len(tables) < 2:
+        return body
+
+    seen_headers: dict[str, int] = {}
+    drop_spans: list[tuple[int, int]] = []
+    for m in tables:
+        table_text = m.group(1)
+        # Extract header row (first row after \toprule)
+        header_match = re.search(r"\\toprule\s*\n(.+?)\\\\", table_text)
+        if not header_match:
+            continue
+        header_key = re.sub(r"\s+", " ", header_match.group(1).strip())
+        if header_key in seen_headers:
+            drop_spans.append((m.start(), m.end()))
+            _dup_log.getLogger(__name__).info(
+                "IMP-30: Dropping duplicate table (same header as table #%d)",
+                seen_headers[header_key],
+            )
+        else:
+            seen_headers[header_key] = len(seen_headers) + 1
+
+    # Remove duplicates in reverse order to preserve offsets
+    for start, end in reversed(drop_spans):
+        body = body[:start] + body[end:]
+
+    return body
+
+
 # ---------------------------------------------------------------------------
 # Block-level conversion
 # ---------------------------------------------------------------------------
@@ -708,7 +751,13 @@ _TABLE_COUNTER = 0
 
 
 def _render_table(table_lines: list[str], caption: str = "") -> str:
-    """Render a Markdown table as a LaTeX tabular inside a table environment."""
+    """Render a Markdown table as a LaTeX tabular inside a table environment.
+
+    IMP-23: Auto-wraps in ``\\resizebox`` when columns > 5 or any cell
+    text exceeds 25 characters, preventing overflow in conference formats.
+    IMP-32: Generates descriptive captions from header columns when the
+    caption is empty or just 'Table N'.
+    """
     global _TABLE_COUNTER  # noqa: PLW0603
 
     if len(table_lines) < 2:
@@ -725,9 +774,18 @@ def _render_table(table_lines: list[str], caption: str = "") -> str:
 
     _TABLE_COUNTER += 1
 
+    # IMP-23: Detect wide tables that need resizebox
+    max_cell_len = max(
+        (len(c) for row in [header] + body_rows for c in row),
+        default=0,
+    )
+    needs_resize = ncols > 5 or max_cell_len > 25
+
     lines_out: list[str] = []
     lines_out.append("\\begin{table}[ht]")
     lines_out.append("\\centering")
+    if needs_resize:
+        lines_out.append("\\resizebox{\\textwidth}{!}{%")
     lines_out.append(f"\\begin{{tabular}}{{{col_spec}}}")
     lines_out.append("\\toprule")
     lines_out.append(
@@ -742,19 +800,36 @@ def _render_table(table_lines: list[str], caption: str = "") -> str:
         )
     lines_out.append("\\bottomrule")
     lines_out.append("\\end{tabular}")
+    if needs_resize:
+        lines_out.append("}")  # close resizebox
 
-    # Add caption and label
+    # IMP-32: Generate descriptive caption from header if caption is generic
     if caption:
-        # Strip "Table N:" or "Table N." prefix from caption text
         cap_text = re.sub(r"^Table\s+\d+[.:]\s*", "", caption).strip()
         if cap_text:
             lines_out.append(f"\\caption{{{_convert_inline(cap_text)}}}")
+        else:
+            # Caption was just "Table N" — generate from header
+            auto_cap = _auto_table_caption(header, _TABLE_COUNTER)
+            lines_out.append(f"\\caption{{{auto_cap}}}")
     else:
-        lines_out.append(f"\\caption{{Table {_TABLE_COUNTER}}}")
+        auto_cap = _auto_table_caption(header, _TABLE_COUNTER)
+        lines_out.append(f"\\caption{{{auto_cap}}}")
     lines_out.append(f"\\label{{tab:{_TABLE_COUNTER}}}")
     lines_out.append("\\end{table}")
 
     return "\n".join(lines_out)
+
+
+def _auto_table_caption(header: list[str], table_num: int) -> str:
+    """IMP-32: Generate a descriptive caption from table header columns."""
+    if len(header) <= 1:
+        return f"Table {table_num}"
+    # Use header columns to build a description
+    cols = [c.strip() for c in header if c.strip()]
+    if len(cols) >= 2:
+        return f"Comparison of {_convert_inline(cols[0])} across {', '.join(_convert_inline(c) for c in cols[1:min(4, len(cols))])}"
+    return f"Table {table_num}"
 
 
 def _parse_table_row(line: str) -> list[str]:
@@ -814,11 +889,21 @@ _UNICODE_TO_ASCII: dict[str, str] = {
 }
 
 
+_ALGO_KEYWORDS = re.compile(
+    r"\b(Input|Output|Return|While|For|If|Else|Repeat|Until|Function|Procedure|Algorithm)\b",
+    re.IGNORECASE,
+)
+
+
 def _render_code_block(lang: str, code: str) -> str:
-    """Render a fenced code block as a LaTeX verbatim environment.
+    """Render a fenced code block as a LaTeX environment.
+
+    IMP-28: Detects pseudocode blocks (language hint 'algorithm' /
+    'pseudocode', or 3+ algorithm keywords) and renders them inside an
+    ``algorithm`` + ``algorithmic`` environment instead of verbatim.
 
     Replaces Unicode characters (Greek letters, arrows, math symbols)
-    with ASCII equivalents so pdflatex can compile the verbatim block.
+    with ASCII equivalents so pdflatex can compile the block.
     """
     import unicodedata
 
@@ -829,6 +914,31 @@ def _render_code_block(lang: str, code: str) -> str:
     escaped = "".join(
         c for c in escaped if not unicodedata.combining(c)
     )
+
+    # IMP-28: Detect pseudocode and use algorithm environment
+    lang_lower = lang.lower().strip()
+    is_algo = lang_lower in ("algorithm", "pseudocode", "algo")
+    if not is_algo:
+        # Heuristic: ≥3 algorithm keywords → treat as pseudocode
+        is_algo = len(_ALGO_KEYWORDS.findall(escaped)) >= 3
+
+    if is_algo:
+        # Extract caption from first comment line if present
+        algo_lines = escaped.split("\n")
+        caption = "Algorithm"
+        if algo_lines and algo_lines[0].strip().startswith("//"):
+            caption = algo_lines[0].strip().lstrip("/ ").strip()
+            algo_lines = algo_lines[1:]
+        body = "\n".join(algo_lines)
+        return (
+            "\\begin{algorithm}[ht]\n"
+            f"\\caption{{{_convert_inline(caption)}}}\n"
+            "\\begin{algorithmic}[1]\n"
+            f"{body}\n"
+            "\\end{algorithmic}\n"
+            "\\end{algorithm}"
+        )
+
     return f"\\begin{{verbatim}}\n{escaped}\n\\end{{verbatim}}"
 
 

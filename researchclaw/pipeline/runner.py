@@ -559,6 +559,34 @@ def _package_deliverables(
         except Exception:  # noqa: BLE001
             logger.debug("Cite key verification/repair skipped")
 
+    # --- 9. IMP-18: Compile LaTeX to verify paper.tex ---
+    if tex_path.exists() and bib_path.exists():
+        try:
+            from researchclaw.templates.compiler import compile_latex
+
+            compile_result = compile_latex(tex_path, max_attempts=3, timeout=120)
+            if compile_result.success:
+                logger.info("IMP-18: paper.tex compiles successfully")
+                # Keep the generated PDF
+                pdf_path = dest / tex_path.stem
+                pdf_file = dest / (tex_path.stem + ".pdf")
+                if pdf_file.exists():
+                    packaged.append(f"{tex_path.stem}.pdf")
+            else:
+                logger.warning(
+                    "IMP-18: paper.tex compilation failed after %d attempts: %s",
+                    compile_result.attempts,
+                    compile_result.errors[:3],
+                )
+            if compile_result.fixes_applied:
+                logger.info(
+                    "IMP-18: Applied %d auto-fixes: %s",
+                    len(compile_result.fixes_applied),
+                    compile_result.fixes_applied,
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("IMP-18: LaTeX compilation skipped (non-blocking)")
+
     if not packaged:
         # Nothing to package — remove empty dir
         dest.rmdir()
