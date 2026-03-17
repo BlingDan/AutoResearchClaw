@@ -190,6 +190,7 @@ def check_novelty(
     max_search_results: int = 30,
     similarity_threshold: float = 0.25,
     s2_api_key: str = "",
+    s2_base_url: str = "",
 ) -> dict[str, Any]:
     """Check whether the proposed research has significant overlap with existing work.
 
@@ -208,6 +209,8 @@ def check_novelty(
         Minimum similarity to flag a paper as potentially overlapping.
     s2_api_key:
         Optional Semantic Scholar API key.
+    s2_base_url:
+        Optional Semantic Scholar API base URL or proxy URL.
 
     Returns
     -------
@@ -233,6 +236,7 @@ def check_novelty(
             queries,
             limit_per_query=min(15, max_search_results),
             s2_api_key=s2_api_key,
+            s2_base_url=s2_base_url,
         )
         total_papers_retrieved = len(found)
         for paper in found[:max_search_results]:

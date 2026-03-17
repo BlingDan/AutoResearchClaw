@@ -118,6 +118,7 @@ class LlmConfig:
     primary_model: str = ""
     fallback_models: tuple[str, ...] = ()
     s2_api_key: str = ""
+    s2_base_url: str = ""
     notes: str = ""
     acp: AcpConfig = field(default_factory=AcpConfig)
 
@@ -441,6 +442,7 @@ def _parse_llm_config(data: dict[str, Any]) -> LlmConfig:
         primary_model=data.get("primary_model", ""),
         fallback_models=tuple(data.get("fallback_models") or ()),
         s2_api_key=data.get("s2_api_key", ""),
+        s2_base_url=data.get("s2_base_url", ""),
         notes=data.get("notes", ""),
         acp=AcpConfig(
             agent=acp_data.get("agent", "claude"),

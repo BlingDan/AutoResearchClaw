@@ -575,6 +575,7 @@ def verify_by_title_search(
     title: str,
     *,
     s2_api_key: str = "",
+    s2_base_url: str = "",
 ) -> CitationResult | None:
     """Search for a paper by title and verify its existence.
 
@@ -588,6 +589,7 @@ def verify_by_title_search(
             title,
             limit=5,
             s2_api_key=s2_api_key,
+            s2_base_url=s2_base_url,
             deduplicate=True,
         )
     except Exception as exc:
@@ -661,6 +663,7 @@ def verify_citations(
     bib_text: str,
     *,
     s2_api_key: str = "",
+    s2_base_url: str = "",
     inter_verify_delay: float = 1.5,
 ) -> VerificationReport:
     """Verify all BibTeX entries against real academic APIs.
@@ -677,6 +680,8 @@ def verify_citations(
         Raw BibTeX string.
     s2_api_key:
         Optional Semantic Scholar API key for L3 title search.
+    s2_base_url:
+        Optional Semantic Scholar API base URL or proxy URL for L3 title search.
     inter_verify_delay:
         Seconds to wait between API calls (rate limiting).
     """
@@ -780,7 +785,11 @@ def verify_citations(
 
         # L3b: S2 title search — last resort fallback
         if result is None:
-            result = verify_by_title_search(title, s2_api_key=s2_api_key)
+            result = verify_by_title_search(
+                title,
+                s2_api_key=s2_api_key,
+                s2_base_url=s2_base_url,
+            )
             api_call_count += 1
             if result is not None:
                 logger.info(

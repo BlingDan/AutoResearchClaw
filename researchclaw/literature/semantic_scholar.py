@@ -30,7 +30,9 @@ from researchclaw.literature.models import Author, Paper
 
 logger = logging.getLogger(__name__)
 
-_BASE_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
+_DEFAULT_API_BASE = "https://api.semanticscholar.org"
+_SEARCH_PATH = "/graph/v1/paper/search"
+_BATCH_PATH = "/graph/v1/paper/batch"
 _FIELDS = "paperId,title,abstract,year,venue,citationCount,authors,externalIds,url"
 _MAX_PER_REQUEST = 100
 _RATE_LIMIT_SEC = 1.5  # conservative spacing between requests
@@ -144,6 +146,7 @@ def search_semantic_scholar(
     limit: int = 20,
     year_min: int = 0,
     api_key: str = "",
+    base_url: str = "",
 ) -> list[Paper]:
     """Search Semantic Scholar for papers matching *query*.
 
@@ -157,6 +160,8 @@ def search_semantic_scholar(
         If >0, restrict to papers published in this year or later.
     api_key:
         Optional S2 API key (raises rate limit to 10 req/s).
+    base_url:
+        Optional S2 API base URL or proxy URL.
 
     Returns
     -------
@@ -181,11 +186,12 @@ def search_semantic_scholar(
     if year_min > 0:
         params["year"] = f"{year_min}-"
 
-    url = f"{_BASE_URL}?{urllib.parse.urlencode(params)}"
+    url = f"{_build_endpoint(base_url, _SEARCH_PATH)}?{urllib.parse.urlencode(params)}"
 
     headers: dict[str, str] = {"Accept": "application/json"}
     if api_key:
         headers["x-api-key"] = api_key
+        headers["Authorization"] = f"Bearer {api_key}"
 
     _last_request_time = time.monotonic()
     data = _request_with_retry(url, headers)
@@ -257,7 +263,6 @@ def _request_with_retry(
     return None
 
 
-_BATCH_URL = "https://api.semanticscholar.org/graph/v1/paper/batch"
 _BATCH_MAX = 500  # S2 batch endpoint max
 
 
@@ -266,6 +271,7 @@ def batch_fetch_papers(
     *,
     api_key: str = "",
     fields: str = _FIELDS,
+    base_url: str = "",
 ) -> list[Paper]:
     """Batch fetch paper details via POST /graph/v1/paper/batch.
 
@@ -290,7 +296,7 @@ def batch_fetch_papers(
     # Process in chunks of _BATCH_MAX
     for i in range(0, len(paper_ids), _BATCH_MAX):
         chunk = paper_ids[i : i + _BATCH_MAX]
-        url = f"{_BATCH_URL}?fields={fields}"
+        url = f"{_build_endpoint(base_url, _BATCH_PATH)}?fields={fields}"
 
         headers: dict[str, str] = {
             "Accept": "application/json",
@@ -298,6 +304,7 @@ def batch_fetch_papers(
         }
         if api_key:
             headers["x-api-key"] = api_key
+            headers["Authorization"] = f"Bearer {api_key}"
 
         body = json.dumps({"ids": chunk}).encode("utf-8")
 
@@ -367,6 +374,15 @@ def _post_with_retry(
 
     logger.error("S2 batch request exhausted retries")
     return None
+
+
+def _build_endpoint(base_url: str, path: str) -> str:
+    """Build an S2 endpoint from an optional API base or proxy URL."""
+    root = (base_url or _DEFAULT_API_BASE).rstrip("/")
+    parsed = urllib.parse.urlparse(root)
+    if parsed.scheme and parsed.netloc and parsed.path.endswith(path):
+        return root
+    return f"{root}{path}"
 
 
 def _parse_s2_paper(item: dict[str, Any]) -> Paper:

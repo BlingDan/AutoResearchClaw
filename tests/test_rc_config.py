@@ -112,6 +112,21 @@ def test_validate_config_with_valid_data_returns_ok_true(tmp_path: Path):
     assert result.errors == ()
 
 
+def test_load_config_parses_s2_base_url(tmp_path: Path):
+    config_path = _write_valid_config(tmp_path)
+    config_text = config_path.read_text(encoding="utf-8")
+    config_text = config_text.replace(
+        "  api_key_env: OPENAI_API_KEY\n",
+        "  api_key_env: OPENAI_API_KEY\n"
+        "  s2_base_url: https://proxy.example.com/semantic-scholar\n",
+    )
+    config_path.write_text(config_text, encoding="utf-8")
+
+    config = load_config(config_path)
+
+    assert config.llm.s2_base_url == "https://proxy.example.com/semantic-scholar"
+
+
 def test_validate_config_missing_required_fields_returns_errors(tmp_path: Path):
     data = _valid_config_data()
     data["research"] = {}

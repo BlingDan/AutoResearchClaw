@@ -1658,6 +1658,7 @@ def _execute_literature_collect(
             limit_per_query=40,
             year_min=year_min,
             s2_api_key=config.llm.s2_api_key,
+            s2_base_url=getattr(config.llm, "s2_base_url", ""),
         )
         if papers:
             real_search_succeeded = True
@@ -2092,6 +2093,7 @@ def _execute_hypothesis_gen(
             hypotheses_text=hypotheses_md,
             papers_already_seen=papers_seen,
             s2_api_key=getattr(config.llm, "s2_api_key", ""),
+            s2_base_url=getattr(config.llm, "s2_base_url", ""),
         )
         (stage_dir / "novelty_report.json").write_text(
             json.dumps(novelty_report, indent=2, ensure_ascii=False),
@@ -7502,6 +7504,7 @@ def _execute_citation_verify(
         )
 
     s2_api_key = getattr(config.llm, "s2_api_key", "") or ""
+    s2_base_url = getattr(config.llm, "s2_base_url", "") or ""
 
     from researchclaw.literature.verify import parse_bibtex_entries
     _n_entries = len(parse_bibtex_entries(bib_text))
@@ -7510,7 +7513,11 @@ def _execute_citation_verify(
         "(DOI→CrossRef > OpenAlex > arXiv > S2)…",
         _n_entries,
     )
-    report = verify_citations(bib_text, s2_api_key=s2_api_key)
+    report = verify_citations(
+        bib_text,
+        s2_api_key=s2_api_key,
+        s2_base_url=s2_base_url,
+    )
     logger.info(
         "[citation-verify] Done: %d verified, %d suspicious, "
         "%d hallucinated, %d skipped (integrity: %.0f%%)",

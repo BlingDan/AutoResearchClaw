@@ -221,6 +221,40 @@ class TestSemanticScholar:
         assert len(papers) == 1
         assert papers[0].title == "Test Paper on Transformers"
 
+    def test_search_semantic_scholar_uses_custom_base_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from researchclaw.literature.semantic_scholar import _reset_circuit_breaker
+        _reset_circuit_breaker()
+
+        response_bytes = json.dumps(SAMPLE_S2_RESPONSE).encode("utf-8")
+        captured: dict[str, object] = {}
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = response_bytes
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        def _mock_urlopen(req: object, timeout: int = 0) -> object:
+            captured["url"] = req.full_url
+            return mock_resp
+
+        monkeypatch.setattr(
+            "researchclaw.literature.semantic_scholar.urllib.request.urlopen",
+            _mock_urlopen,
+        )
+
+        papers = search_semantic_scholar(
+            "transformers",
+            limit=5,
+            base_url="https://proxy.example.com/graph/v1/paper/search",
+        )
+
+        assert len(papers) == 1
+        assert str(captured["url"]).startswith(
+            "https://proxy.example.com/graph/v1/paper/search?"
+        )
+
     def test_search_semantic_scholar_network_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

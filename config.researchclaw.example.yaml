@@ -68,6 +68,8 @@ llm:
   
   # Semantic Scholar API key (optional, for literature search)
   s2_api_key: ""
+  # Semantic Scholar API proxy/base URL (optional, for domestic proxy)
+  s2_base_url: ""
   notes: ""
 
 # ============================================================================
