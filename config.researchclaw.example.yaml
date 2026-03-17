@@ -71,6 +71,21 @@ llm:
   notes: ""
 
 # ============================================================================
+# Example: OpenAI-Compatible API Proxy (Third-party/OpenAI-compatible endpoints)
+# ============================================================================
+# IMPORTANT: When using a custom base_url (e.g., API proxies, self-hosted models),
+# you MUST set provider to "openai-compatible" to prevent the preset base_url
+# from overriding your custom endpoint.
+#
+# llm:
+#   provider: "openai-compatible"
+#   base_url: "https://your-api-proxy.com/v1"
+#   api_key_env: "OPENAI_API_KEY"
+#   primary_model: "gpt-4o"
+#   fallback_models:
+#     - "gpt-4o-mini"
+
+# ============================================================================
 # Example: OpenRouter Configuration
 # ============================================================================
 # llm:
