@@ -31,7 +31,9 @@ from researchclaw.literature.models import Author, Paper
 
 logger = logging.getLogger(__name__)
 
-_BASE_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
+_DEFAULT_API_ROOT = "https://api.semanticscholar.org"
+_SEARCH_PATH = "/graph/v1/paper/search"
+_BATCH_PATH = "/graph/v1/paper/batch"
 _FIELDS = "paperId,title,abstract,year,venue,citationCount,authors,externalIds,url"
 _MAX_PER_REQUEST = 100
 _RATE_LIMIT_SEC = 1.5  # conservative spacing between requests
@@ -151,6 +153,7 @@ def search_semantic_scholar(
     limit: int = 20,
     year_min: int = 0,
     api_key: str = "",
+    base_url: str = "",
 ) -> list[Paper]:
     """Search Semantic Scholar for papers matching *query*.
 
@@ -164,6 +167,12 @@ def search_semantic_scholar(
         If >0, restrict to papers published in this year or later.
     api_key:
         Optional S2 API key (raises rate limit to 10 req/s).
+    base_url:
+        Optional Semantic Scholar-compatible endpoint root or full search URL.
+        Examples:
+        - ``https://api.semanticscholar.org``
+        - ``https://proxy.example.com``
+        - ``https://proxy.example.com/graph/v1/paper/search``
 
     Returns
     -------
@@ -190,7 +199,8 @@ def search_semantic_scholar(
     if year_min > 0:
         params["year"] = f"{year_min}-"
 
-    url = f"{_BASE_URL}?{urllib.parse.urlencode(params)}"
+    search_url = _resolve_s2_url(base_url, _SEARCH_PATH)
+    url = f"{search_url}?{urllib.parse.urlencode(params)}"
 
     headers: dict[str, str] = {"Accept": "application/json"}
     if api_key:
@@ -264,8 +274,18 @@ def _request_with_retry(
     return None
 
 
-_BATCH_URL = "https://api.semanticscholar.org/graph/v1/paper/batch"
 _BATCH_MAX = 500  # S2 batch endpoint max
+
+
+def _resolve_s2_url(base_url: str, path: str) -> str:
+    """Resolve a Semantic Scholar endpoint URL from a user override."""
+    raw = (base_url or "").strip()
+    if not raw:
+        return f"{_DEFAULT_API_ROOT}{path}"
+    root = raw.rstrip("/")
+    if root.endswith(path):
+        return root
+    return f"{root}{path}"
 
 
 def batch_fetch_papers(
@@ -273,6 +293,7 @@ def batch_fetch_papers(
     *,
     api_key: str = "",
     fields: str = _FIELDS,
+    base_url: str = "",
 ) -> list[Paper]:
     """Batch fetch paper details via POST /graph/v1/paper/batch.
 
@@ -299,7 +320,8 @@ def batch_fetch_papers(
     # Process in chunks of _BATCH_MAX
     for i in range(0, len(paper_ids), _BATCH_MAX):
         chunk = paper_ids[i : i + _BATCH_MAX]
-        url = f"{_BATCH_URL}?fields={fields}"
+        batch_url = _resolve_s2_url(base_url, _BATCH_PATH)
+        url = f"{batch_url}?fields={fields}"
 
         headers: dict[str, str] = {
             "Accept": "application/json",

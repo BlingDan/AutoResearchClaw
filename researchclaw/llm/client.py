@@ -35,6 +35,30 @@ _NEW_PARAM_MODELS = frozenset(
     }
 )
 
+_RESPONSES_MODEL_PREFIXES = (
+    "gpt-",
+    "o3",
+    "o4",
+)
+
+
+def _safe_env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+        return value if value > 0 else default
+    except ValueError:
+        return default
+
+
+# Some OpenAI-compatible gateways are unstable with very large
+# max_completion_tokens defaults for reasoning models.
+_REASONING_MIN_COMPLETION_TOKENS = _safe_env_int(
+    "RESEARCHCLAW_REASONING_MIN_TOKENS", 32768
+)
+
 _DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -76,6 +100,7 @@ class LLMConfig:
     # MetaClaw bridge: fallback URL if primary (proxy) is unreachable
     fallback_url: str = ""
     fallback_api_key: str = ""
+    fallback_model: str = ""
 
 
 class LLMClient:
@@ -99,9 +124,20 @@ class LLMClient:
             or os.environ.get(rc_config.llm.api_key_env, "")
             or ""
         )
+        backup_api_key = str(
+            getattr(rc_config.llm, "fallback_api_key", "")
+            or os.environ.get(getattr(rc_config.llm, "fallback_api_key_env", ""), "")
+            or ""
+        )
 
         # Use preset base_url if available and config doesn't override
         base_url = rc_config.llm.base_url or preset_base_url or ""
+        base_urls = list(getattr(rc_config.llm, "base_urls", ()) or ())
+        if not base_url and base_urls:
+            base_url = base_urls[0]
+            base_urls = base_urls[1:]
+        else:
+            base_urls = [u for u in base_urls if u and u != base_url]
 
         # Preserve original URL/key before MetaClaw bridge override
         # (needed for Anthropic adapter which should always talk directly
@@ -111,8 +147,8 @@ class LLMClient:
 
         # MetaClaw bridge: if enabled, point to proxy and set up fallback
         bridge = getattr(rc_config, "metaclaw_bridge", None)
-        fallback_url = ""
-        fallback_api_key = ""
+        fallback_url = base_urls[0] if base_urls else ""
+        fallback_api_key = backup_api_key
 
         if bridge and getattr(bridge, "enabled", False):
             fallback_url = base_url
@@ -128,8 +164,10 @@ class LLMClient:
             api_key=api_key,
             primary_model=rc_config.llm.primary_model or "gpt-4o",
             fallback_models=list(rc_config.llm.fallback_models or []),
+            timeout_sec=max(1, int(getattr(rc_config.llm, "timeout_sec", 300))),
             fallback_url=fallback_url,
-            fallback_api_key=fallback_api_key,
+            fallback_api_key=fallback_api_key or api_key,
+            fallback_model=str(getattr(rc_config.llm, "fallback_model", "") or ""),
         )
         client = cls(config)
 
@@ -319,6 +357,50 @@ class LLMClient:
             f"LLM call failed after {self.config.max_retries} retries for model {model}"
         )
 
+    def _should_use_responses_api(self, model: str) -> bool:
+        """Use /responses for GPT/o-series models on the primary endpoint."""
+        if not any(model.startswith(prefix) for prefix in _RESPONSES_MODEL_PREFIXES):
+            return False
+        # Keep legacy compatibility for providers known to require chat/completions.
+        base = self.config.base_url.lower()
+        if "api.minimax.io" in base:
+            return False
+        return True
+
+    def _messages_to_responses_input(
+        self, messages: list[dict[str, str]]
+    ) -> list[dict[str, Any]]:
+        """Convert chat-style messages to Responses API input format."""
+        converted: list[dict[str, Any]] = []
+        for msg in messages:
+            role = str(msg.get("role", "user") or "user")
+            content = str(msg.get("content", "") or "")
+            converted.append(
+                {
+                    "role": role,
+                    "content": [{"type": "input_text", "text": content}],
+                }
+            )
+        return converted
+
+    def _extract_responses_content(self, data: dict[str, Any]) -> str:
+        """Extract assistant text from /responses payload."""
+        output_text = data.get("output_text")
+        if isinstance(output_text, str) and output_text:
+            return output_text
+
+        parts: list[str] = []
+        for item in data.get("output", []) or []:
+            for block in item.get("content", []) or []:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type")
+                if btype in ("output_text", "text"):
+                    text = block.get("text")
+                    if isinstance(text, str) and text:
+                        parts.append(text)
+        return "\n".join(parts).strip()
+
     def _raw_call(
         self,
         model: str,
@@ -352,16 +434,19 @@ class LLMClient:
 
             # Use correct token parameter based on model
             if any(model.startswith(prefix) for prefix in _NEW_PARAM_MODELS):
-                reasoning_min = 32768
-                body["max_completion_tokens"] = max(max_tokens, reasoning_min)
+                body["max_completion_tokens"] = max(
+                    max_tokens, _REASONING_MIN_COMPLETION_TOKENS
+                )
             else:
                 body["max_tokens"] = max_tokens
+
+            use_responses_api = self._should_use_responses_api(model)
 
             if json_mode:
                 # Many OpenAI-compatible proxies serving Claude models don't
                 # support the response_format parameter and return HTTP 400.
                 # Fall back to a system-prompt injection for non-OpenAI models.
-                if model.startswith("claude"):
+                if model.startswith("claude") or use_responses_api:
                     _json_hint = (
                         "You MUST respond with valid JSON only. "
                         "Do not include any text outside the JSON object."
@@ -378,8 +463,24 @@ class LLMClient:
                 else:
                     body["response_format"] = {"type": "json_object"}
 
-            payload = json.dumps(body).encode("utf-8")
-            url = f"{self.config.base_url.rstrip('/')}/chat/completions"
+            if use_responses_api:
+                responses_body: dict[str, Any] = {
+                    "model": model,
+                    "input": self._messages_to_responses_input(msgs),
+                    "temperature": _temp,
+                }
+                if any(model.startswith(prefix) for prefix in _NEW_PARAM_MODELS):
+                    responses_body["max_output_tokens"] = max(
+                        max_tokens, _REASONING_MIN_COMPLETION_TOKENS
+                    )
+                else:
+                    responses_body["max_output_tokens"] = max_tokens
+                payload = json.dumps(responses_body).encode("utf-8")
+                url = f"{self.config.base_url.rstrip('/')}/responses"
+                logger.debug("Using /responses for model %s on primary endpoint", model)
+            else:
+                payload = json.dumps(body).encode("utf-8")
+                url = f"{self.config.base_url.rstrip('/')}/chat/completions"
 
             headers = {
                 "Authorization": f"Bearer {self.config.api_key}",
@@ -394,8 +495,62 @@ class LLMClient:
             try:
                 with urllib.request.urlopen(req, timeout=self.config.timeout_sec) as resp:
                     data = json.loads(resp.read())
+            except urllib.error.HTTPError as exc:
+                # Try fallback endpoint for transient upstream failures.
+                if self.config.fallback_url and exc.code in (502, 503, 504, 524, 529):
+                    logger.warning(
+                        "Primary endpoint HTTP %d, falling back to %s",
+                        exc.code,
+                        self.config.fallback_url,
+                    )
+                    fallback_url = (
+                        f"{self.config.fallback_url.rstrip('/')}/chat/completions"
+                    )
+                    fallback_key = self.config.fallback_api_key or self.config.api_key
+                    fallback_headers = {
+                        "Authorization": f"Bearer {fallback_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": self.config.user_agent,
+                    }
+                    fallback_payload = payload
+                    if self.config.fallback_model:
+                        fb_body = dict(body)
+                        fb_body["model"] = self.config.fallback_model
+                        fb_body.pop("max_tokens", None)
+                        fb_body.pop("max_completion_tokens", None)
+                        if any(
+                            self.config.fallback_model.startswith(prefix)
+                            for prefix in _NEW_PARAM_MODELS
+                        ):
+                            fb_body["max_completion_tokens"] = max(
+                                max_tokens, _REASONING_MIN_COMPLETION_TOKENS
+                            )
+                        else:
+                            fb_body["max_tokens"] = max_tokens
+                        fallback_payload = json.dumps(fb_body).encode("utf-8")
+                    fallback_req = urllib.request.Request(
+                        fallback_url, data=fallback_payload, headers=fallback_headers
+                    )
+                    try:
+                        with urllib.request.urlopen(
+                            fallback_req, timeout=self.config.timeout_sec
+                        ) as resp:
+                            data = json.loads(resp.read())
+                    except urllib.error.HTTPError as fb_exc:
+                        # If fallback key/model is unauthorized, keep primary
+                        # transient error path so retries still happen on primary.
+                        if fb_exc.code in (401, 403):
+                            logger.warning(
+                                "Fallback endpoint rejected request (HTTP %d); "
+                                "continuing with primary error path.",
+                                fb_exc.code,
+                            )
+                            raise exc
+                        raise
+                else:
+                    raise
             except (urllib.error.URLError, OSError) as exc:
-                # MetaClaw bridge: fallback to direct LLM if proxy unreachable
+                # MetaClaw bridge / multi-base-url fallback for connection issues
                 if self.config.fallback_url:
                     logger.warning(
                         "Primary endpoint unreachable, falling back to %s: %s",
@@ -411,18 +566,44 @@ class LLMClient:
                         "Content-Type": "application/json",
                         "User-Agent": self.config.user_agent,
                     }
+                    fallback_payload = payload
+                    if self.config.fallback_model:
+                        fb_body = dict(body)
+                        fb_body["model"] = self.config.fallback_model
+                        fb_body.pop("max_tokens", None)
+                        fb_body.pop("max_completion_tokens", None)
+                        if any(
+                            self.config.fallback_model.startswith(prefix)
+                            for prefix in _NEW_PARAM_MODELS
+                        ):
+                            fb_body["max_completion_tokens"] = max(
+                                max_tokens, _REASONING_MIN_COMPLETION_TOKENS
+                            )
+                        else:
+                            fb_body["max_tokens"] = max_tokens
+                        fallback_payload = json.dumps(fb_body).encode("utf-8")
                     fallback_req = urllib.request.Request(
-                        fallback_url, data=payload, headers=fallback_headers
+                        fallback_url, data=fallback_payload, headers=fallback_headers
                     )
-                    with urllib.request.urlopen(
-                        fallback_req, timeout=self.config.timeout_sec
-                    ) as resp:
-                        data = json.loads(resp.read())
+                    try:
+                        with urllib.request.urlopen(
+                            fallback_req, timeout=self.config.timeout_sec
+                        ) as resp:
+                            data = json.loads(resp.read())
+                    except urllib.error.HTTPError as fb_exc:
+                        if fb_exc.code in (401, 403):
+                            logger.warning(
+                                "Fallback endpoint rejected request (HTTP %d); "
+                                "continuing with primary error path.",
+                                fb_exc.code,
+                            )
+                            raise exc
+                        raise
                 else:
                     raise
 
         # Handle API error responses
-        if "error" in data:
+        if data.get("error"):
             error_info = data["error"]
             error_msg = error_info.get("message", str(error_info))
             error_type = error_info.get("type", "api_error")
@@ -432,25 +613,64 @@ class LLMClient:
                 io.BytesIO(error_msg.encode()),
             )
 
-        # Validate response structure
-        if "choices" not in data or not data["choices"]:
-            raise ValueError(f"Malformed API response: missing choices. Got: {data}")
+        usage = data.get("usage", {}) or {}
 
-        choice = data["choices"][0]
-        usage = data.get("usage", {})
+        # Chat Completions format
+        if "choices" in data and data["choices"]:
+            choice = data["choices"][0]
+            message = choice.get("message", {})
+            content = message.get("content") or ""
+            return LLMResponse(
+                content=content,
+                model=data.get("model", model),
+                prompt_tokens=int(usage.get("prompt_tokens", 0) or 0),
+                completion_tokens=int(usage.get("completion_tokens", 0) or 0),
+                total_tokens=int(usage.get("total_tokens", 0) or 0),
+                finish_reason=choice.get("finish_reason", ""),
+                truncated=(choice.get("finish_reason", "") == "length"),
+                raw=data,
+            )
 
-        message = choice.get("message", {})
-        content = message.get("content") or ""
+        # Responses API format
+        if "output" in data or "output_text" in data:
+            content = self._extract_responses_content(data)
+            status = str(data.get("status", "") or "")
+            incomplete = data.get("incomplete_details") or {}
+            finish_reason = ""
+            if isinstance(incomplete, dict):
+                finish_reason = str(incomplete.get("reason", "") or "")
+            if not finish_reason:
+                finish_reason = status
 
-        return LLMResponse(
-            content=content,
-            model=data.get("model", model),
-            prompt_tokens=usage.get("prompt_tokens", 0),
-            completion_tokens=usage.get("completion_tokens", 0),
-            total_tokens=usage.get("total_tokens", 0),
-            finish_reason=choice.get("finish_reason", ""),
-            truncated=(choice.get("finish_reason", "") == "length"),
-            raw=data,
+            prompt_tokens = int(
+                usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0
+            )
+            completion_tokens = int(
+                usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0
+            )
+            total_tokens = int(
+                usage.get("total_tokens", prompt_tokens + completion_tokens)
+                or (prompt_tokens + completion_tokens)
+            )
+
+            truncated = status == "incomplete" or finish_reason in (
+                "max_output_tokens",
+                "length",
+            )
+            return LLMResponse(
+                content=content,
+                model=data.get("model", model),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                finish_reason=finish_reason,
+                truncated=truncated,
+                raw=data,
+            )
+
+        raise ValueError(
+            "Malformed API response: expected choices or responses output. "
+            f"Got: {data}"
         )
 
 
@@ -484,5 +704,6 @@ def create_client_from_yaml(yaml_path: str | None = None) -> LLMClient:
             fallback_models=llm_section.get(
                 "fallback_models", ["gpt-4.1", "gpt-4o-mini"]
             ),
+            timeout_sec=int(llm_section.get("timeout_sec", 300)),
         )
     )

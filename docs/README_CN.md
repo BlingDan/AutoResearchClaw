@@ -426,6 +426,7 @@ llm:
   primary_model: "gpt-4o"          # 主模型
   fallback_models: ["gpt-4o-mini"] # 回退链
   s2_api_key: ""                   # Semantic Scholar API key（可选，更高速率限制）
+  s2_base_url: ""                  # Semantic Scholar 兼容 base URL 覆盖（可选）
   acp:                             # 仅在 provider: "acp" 时使用
     agent: "claude"                # ACP Agent CLI 命令（claude, codex, gemini 等）
     cwd: "."                       # Agent 的工作目录

@@ -357,6 +357,7 @@ def _execute_literature_collect(
             limit_per_query=40,
             year_min=year_min,
             s2_api_key=config.llm.s2_api_key,
+            s2_base_url=getattr(config.llm, "s2_base_url", ""),
         )
         if papers:
             real_search_succeeded = True

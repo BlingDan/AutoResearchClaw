@@ -127,6 +127,7 @@ llm:
     - "gpt-4.1"
     - "gpt-4o-mini"
   s2_api_key: ""                             # Optional: Semantic Scholar API key for higher rate limits
+  s2_base_url: ""                            # Optional: Semantic Scholar-compatible base URL override
 ```
 
 **Using an environment variable** (recommended for security):

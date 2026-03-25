@@ -323,6 +323,19 @@ def _execute_code_generation(
     _code_agent_active = False
     _beast_mode_used = False
     _code_max_tokens = 8192
+    _low_latency_token_cap = 0
+    if 0 < int(getattr(config.llm, "timeout_sec", 0) or 0) <= 30:
+        _low_latency_token_cap = 1024
+
+    def _apply_low_latency_cap(value: int) -> int:
+        if _low_latency_token_cap > 0 and value > _low_latency_token_cap:
+            logger.info(
+                "Low-latency token cap active for Stage 10: %d -> %d",
+                value,
+                _low_latency_token_cap,
+            )
+            return _low_latency_token_cap
+        return value
 
     # ── Beast Mode: OpenCode external agent (optional) ─────────────────
     _oc_cfg = config.experiment.opencode
@@ -470,6 +483,7 @@ def _execute_code_generation(
             for p in ("gpt-5", "o3", "o4")
         ):
             _code_max_tokens = 16384
+        _code_max_tokens = _apply_low_latency_cap(_code_max_tokens)
 
         # ── Domain detection + Code Search for non-ML domains ──────────
         _domain_profile = None
@@ -571,6 +585,7 @@ def _execute_code_generation(
         _code_max_tokens = sp.max_tokens or 8192
         if any(config.llm.primary_model.startswith(p) for p in ("gpt-5", "o3", "o4")):
             _code_max_tokens = max(_code_max_tokens, 16384)
+        _code_max_tokens = _apply_low_latency_cap(_code_max_tokens)
 
         resp = _chat_with_prompt(
             llm,
@@ -594,7 +609,7 @@ def _execute_code_generation(
                 sp.system,
                 sp.user,
                 json_mode=sp.json_mode,
-                max_tokens=32768,
+                max_tokens=_apply_low_latency_cap(32768),
             )
             files = _extract_multi_file_blocks(resp.content)
         if not files:

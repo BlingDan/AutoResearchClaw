@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 import json
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -1378,14 +1379,40 @@ class CodeAgent:
 
     # ── Helpers ────────────────────────────────────────────────────────────
 
+    def _effective_max_tokens(self, requested: int) -> int:
+        """Clamp requested max_tokens for low-latency environments."""
+        cap: int | None = None
+
+        env_cap = os.getenv("RESEARCHCLAW_CODE_AGENT_MAX_TOKENS", "").strip()
+        if env_cap:
+            try:
+                cap = max(1, int(env_cap))
+            except ValueError:
+                cap = None
+
+        if cap is None:
+            timeout_sec = int(
+                getattr(getattr(self._llm, "config", None), "timeout_sec", 0) or 0
+            )
+            if 0 < timeout_sec <= 30:
+                cap = 2048
+
+        if cap is not None and requested > cap:
+            self._log_event(
+                f"  Low-latency token cap active: {requested} -> {cap}"
+            )
+            return cap
+        return requested
+
     def _chat(self, system: str, user: str, max_tokens: int = 8192) -> Any:
         """Make an LLM call and track count."""
         self._calls += 1
         messages = [{"role": "user", "content": user}]
+        effective_max_tokens = self._effective_max_tokens(max_tokens)
         return self._llm.chat(
             messages=messages,
             system=system,
-            max_tokens=max_tokens,
+            max_tokens=effective_max_tokens,
         )
 
     def _get_or_create_sandbox(self) -> _SandboxLike:

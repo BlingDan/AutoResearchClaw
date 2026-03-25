@@ -109,6 +109,7 @@ def search_papers(
     year_min: int = 0,
     deduplicate: bool = True,
     s2_api_key: str = "",
+    s2_base_url: str = "",
 ) -> list[Paper]:
     """Search multiple academic sources and return deduplicated results.
 
@@ -126,6 +127,8 @@ def search_papers(
         Whether to remove duplicates across sources.
     s2_api_key:
         Optional Semantic Scholar API key.
+    s2_base_url:
+        Optional Semantic Scholar-compatible API base URL.
 
     Returns
     -------
@@ -166,6 +169,7 @@ def search_papers(
                     limit=limit,
                     year_min=year_min,
                     api_key=s2_api_key,
+                    base_url=s2_base_url,
                 )
                 all_papers.extend(papers)
                 cache_put(query, "semantic_scholar", limit, _papers_to_dicts(papers))
@@ -237,6 +241,7 @@ def search_papers_multi_query(
     sources: Sequence[str] = _DEFAULT_SOURCES,
     year_min: int = 0,
     s2_api_key: str = "",
+    s2_base_url: str = "",
     inter_query_delay: float = 1.5,
 ) -> list[Paper]:
     """Run multiple queries and return deduplicated union.
@@ -254,6 +259,7 @@ def search_papers_multi_query(
             sources=sources,
             year_min=year_min,
             s2_api_key=s2_api_key,
+            s2_base_url=s2_base_url,
             deduplicate=False,  # we dedup globally below
         )
         all_papers.extend(results)

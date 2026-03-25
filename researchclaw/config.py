@@ -175,11 +175,17 @@ class AcpConfig:
 class LlmConfig:
     provider: str
     base_url: str = ""
+    base_urls: tuple[str, ...] = ()
     api_key_env: str = ""
     api_key: str = ""
+    fallback_api_key_env: str = ""
+    fallback_api_key: str = ""
+    fallback_model: str = ""
     primary_model: str = ""
     fallback_models: tuple[str, ...] = ()
     s2_api_key: str = ""
+    s2_base_url: str = ""
+    timeout_sec: int = 300
     notes: str = ""
     acp: AcpConfig = field(default_factory=AcpConfig)
 
@@ -925,11 +931,17 @@ def _parse_llm_config(data: dict[str, Any]) -> LlmConfig:
     return LlmConfig(
         provider=data.get("provider", "openai-compatible"),
         base_url=data.get("base_url", ""),
+        base_urls=tuple(data.get("base_urls") or ()),
         api_key_env=data.get("api_key_env", ""),
         api_key=data.get("api_key", ""),
+        fallback_api_key_env=data.get("fallback_api_key_env", ""),
+        fallback_api_key=data.get("fallback_api_key", ""),
+        fallback_model=data.get("fallback_model", ""),
         primary_model=data.get("primary_model", ""),
         fallback_models=tuple(data.get("fallback_models") or ()),
         s2_api_key=data.get("s2_api_key", ""),
+        s2_base_url=data.get("s2_base_url", ""),
+        timeout_sec=_safe_int(data.get("timeout_sec"), 300),
         notes=data.get("notes", ""),
         acp=AcpConfig(
             agent=acp_data.get("agent", "claude"),

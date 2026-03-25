@@ -1,127 +1,45 @@
-<p align="center">
-  <img src="image/logo.png" width="700" alt="AutoResearchClaw Logo">
-</p>
+# AutoResearchClaw
 
-<h2 align="center"><b>Chat an Idea. Get a Paper. Fully Autonomous & Self-Evolving.</b></h2>
+AutoResearchClaw is an autonomous research pipeline: input a topic, get a reproducible paper draft package (paper text, references, experiment artifacts, and figures).
 
+Useful links:
+- [Integration Guide](docs/integration-guide.md)
+- [Testing Guide](docs/TESTER_GUIDE.md)
+- [Chinese README](docs/README_CN.md)
+- [Local Windows Minimal](docs/LOCAL_WIN_MINIMAL.md)
 
-
-<p align="center">
-  <b><i><font size="5">Just chat with <a href="#openclaw-integration">OpenClaw</a>: "Research X" → done.</font></i></b>
-</p>
-
-<p align="center">
-  <img src="image/framework_v2.png" width="100%" alt="AutoResearchClaw Framework">
-</p>
-
-
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
-  <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+"></a>
-  <a href="#testing"><img src="https://img.shields.io/badge/Tests-1823%20passed-brightgreen?logo=pytest&logoColor=white" alt="1823 Tests Passed"></a>
-  <a href="https://github.com/aiming-lab/AutoResearchClaw"><img src="https://img.shields.io/badge/GitHub-AutoResearchClaw-181717?logo=github" alt="GitHub"></a>
-  <a href="#openclaw-integration"><img src="https://img.shields.io/badge/OpenClaw-Compatible-ff4444?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6IiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg==" alt="OpenClaw Compatible"></a>
-  <a href="https://discord.gg/u4ksqW5P"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
-</p>
-
-<p align="center">
-  <a href="docs/README_CN.md">🇨🇳 中文</a> ·
-  <a href="docs/README_JA.md">🇯🇵 日本語</a> ·
-  <a href="docs/README_KO.md">🇰🇷 한국어</a> ·
-  <a href="docs/README_FR.md">🇫🇷 Français</a> ·
-  <a href="docs/README_DE.md">🇩🇪 Deutsch</a> ·
-  <a href="docs/README_ES.md">🇪🇸 Español</a> ·
-  <a href="docs/README_PT.md">🇧🇷 Português</a> ·
-  <a href="docs/README_RU.md">🇷🇺 Русский</a> ·
-  <a href="docs/README_AR.md">🇸🇦 العربية</a>
-</p>
-
-<p align="center">
-  <a href="docs/showcase/SHOWCASE.md">🏆 Paper Showcase</a> · <a href="docs/integration-guide.md">📖 Integration Guide</a> · <a href="https://discord.gg/u4ksqW5P">💬 Discord Community</a>
-</p>
-
----
-
-<table>
-<tr>
-<td width="18%">
-<a href="docs/showcase/SHOWCASE.md"><img src="docs/showcase/thumbnails/paper_I_random_matrix-01.png" width="120" alt="Sample Paper"/></a>
-</td>
-<td valign="middle">
-<b>🏆 Generated Paper Showcase</b><br><br>
-<b>8 papers across 8 domains</b> — math, statistics, biology, computing, NLP, RL, vision, robustness — generated fully autonomously with zero human intervention.<br><br>
-<a href="docs/showcase/SHOWCASE.md"><img src="https://img.shields.io/badge/View_Full_Showcase_→-All_8_Papers-d73a49?style=for-the-badge" alt="View Showcase"></a>
-</td>
-</tr>
-</table>
-
----
-
-> **🧪 We're looking for testers!** Try the pipeline with your own research idea — from any field — and [tell us what you think](docs/TESTER_GUIDE.md). Your feedback directly shapes the next version. **[→ Testing Guide](docs/TESTER_GUIDE.md)** | **[→ 中文测试指南](docs/TESTER_GUIDE_CN.md)** | **[→ 日本語テストガイド](docs/TESTER_GUIDE_JA.md)**
-
----
-
-## 🔥 News
-- **[03/22/2026]** [v0.3.2](https://github.com/aiming-lab/AutoResearchClaw/releases/tag/v0.3.2) — **Cross-Platform Support + Major Stability** — AutoResearchClaw now runs on any ACP-compatible agent backend (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, Kimi CLI) and supports messaging platforms (Discord, Telegram, Lark, WeChat) via OpenClaw bridge. New CLI-agent code generation backend delegates Stages 10 & 13 to external CLI agents with budget control and timeout management. Also includes anti-fabrication system (VerifiedRegistry + experiment diagnosis & repair loop), 100+ bug fixes, modular executor refactoring, `--resume` auto-detection, LLM retry hardening, and community-reported fixes. 
-- **[03/18/2026]** [v0.3.1](https://github.com/aiming-lab/AutoResearchClaw/releases/tag/v0.3.1) — **OpenCode Beast Mode + Community Contributions** — New "Beast Mode" routes complex code generation to [OpenCode](https://github.com/anomalyco/opencode) with automatic complexity scoring and graceful fallback. Added Novita AI provider support, thread-safety hardening, improved LLM output parsing robustness, and 20+ bug fixes from community PRs and internal audit.
-- **[03/17/2026]** [v0.3.0](https://github.com/aiming-lab/AutoResearchClaw/releases/tag/v0.3.0) — **MetaClaw Integration** — AutoResearchClaw now supports [MetaClaw](https://github.com/aiming-lab/MetaClaw) cross-run learning: pipeline failures → structured lessons → reusable skills, injected into all 23 stages. **+18.3%** robustness in controlled experiments. Opt-in (`metaclaw_bridge.enabled: true`), fully backward-compatible. See [Integration Guide](#-metaclaw-integration).
-- **[03/16/2026]** [v0.2.0](https://github.com/aiming-lab/AutoResearchClaw/releases/tag/v0.2.0) — Three multi-agent subsystems (CodeAgent, BenchmarkAgent, FigureAgent), hardened Docker sandbox with network-policy-aware execution, 4-round paper quality audit (AI-slop detection, 7-dim review scoring, NeurIPS checklist), and 15+ bug fixes from production runs.
-- **[03/15/2026]** [v0.1.0](https://github.com/aiming-lab/AutoResearchClaw/releases/tag/v0.1.0) — We release AutoResearchClaw: a fully autonomous 23-stage research pipeline that turns a single research idea into a conference-ready paper. No human intervention required.
-
----
-
-## ⚡ One Command. One Paper.
+## Quick Command
 
 ```bash
-pip install -e . && researchclaw setup && researchclaw init && researchclaw run --topic "Your research idea here" --auto-approve
+uv venv .venv && uv pip install --python .venv -e . && uv run --python .venv researchclaw setup && uv run --python .venv researchclaw init && uv run --python .venv researchclaw run --topic "Your research idea here" --auto-approve
 ```
 
-
 ---
 
-## 🤔 What Is This?
-
-**You think it. AutoResearchClaw writes it.**
-
-Drop a research topic — get back a full academic paper with real literature from OpenAlex, Semantic Scholar & arXiv, hardware-aware sandbox experiments (GPU/MPS/CPU auto-detected), statistical analysis, multi-agent peer review, and conference-ready LaTeX targeting NeurIPS/ICML/ICLR. No babysitting. No copy-pasting. No hallucinated references.
-
-<table>
-<tr><td>📄</td><td><code>paper_draft.md</code></td><td>Full academic paper (Introduction, Related Work, Method, Experiments, Results, Conclusion)</td></tr>
-<tr><td>📐</td><td><code>paper.tex</code></td><td>Conference-ready LaTeX (NeurIPS / ICLR / ICML templates)</td></tr>
-<tr><td>📚</td><td><code>references.bib</code></td><td>Real BibTeX references from OpenAlex, Semantic Scholar and arXiv — auto-pruned to match inline citations</td></tr>
-<tr><td>🔍</td><td><code>verification_report.json</code></td><td>4-layer citation integrity + relevance verification (arXiv, CrossRef, DataCite, LLM)</td></tr>
-<tr><td>🧪</td><td><code>experiment runs/</code></td><td>Generated code + sandbox results + structured JSON metrics</td></tr>
-<tr><td>📊</td><td><code>charts/</code></td><td>Auto-generated condition comparison charts with error bars and confidence intervals</td></tr>
-<tr><td>📝</td><td><code>reviews.md</code></td><td>Multi-agent peer review with methodology-evidence consistency checks</td></tr>
-<tr><td>🧬</td><td><code>evolution/</code></td><td>Self-learning lessons extracted from each run</td></tr>
-<tr><td>📦</td><td><code>deliverables/</code></td><td>All final outputs in one folder — compile-ready for Overleaf</td></tr>
-</table>
-
-The pipeline runs **end-to-end without human intervention**. When experiments fail, it self-heals. When hypotheses don't hold, it pivots. When citations are fake, it kills them.
-
-🌍 **Run it anywhere.** AutoResearchClaw isn't locked to a single platform. Use it standalone via CLI, plug it into [OpenClaw](https://github.com/openclaw/openclaw), or wire it up through any ACP-compatible agent — 🤖 Claude Code, 💻 Codex CLI, 🐙 Copilot CLI, ♊ Gemini CLI, 🌙 Kimi CLI, you name it. And because OpenClaw bridges to messaging platforms, you can kick off a full research run from 💬 Discord, ✈️ Telegram, 🐦 Lark (飞书), 💚 WeChat, or wherever your team already hangs out. One topic in, one paper out — no matter where you type it.
-
----
-
-## 🚀 Quick Start
-
+## Quick Start
 ```bash
 # 1. Clone & install
 git clone https://github.com/aiming-lab/AutoResearchClaw.git
 cd AutoResearchClaw
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
+uv venv .venv
+uv pip install --python .venv -e .
 
 # 2. Setup (interactive — installs OpenCode beast mode, checks Docker/LaTeX)
-researchclaw setup
+uv run --python .venv researchclaw setup
 
 # 3. Configure
-researchclaw init          # Interactive: choose LLM provider, creates config.arc.yaml
+uv run --python .venv researchclaw init          # Interactive: choose LLM provider, creates config.arc.yaml
 # Or manually: cp config.researchclaw.example.yaml config.arc.yaml
 
 # 4. Run
 export OPENAI_API_KEY="sk-..."
-researchclaw run --config config.arc.yaml --topic "Your research idea" --auto-approve
+uv run --python .venv researchclaw run --config config.arc.yaml --topic "Your research idea" --auto-approve
+```
+
+For local-only Windows usage with less optional feature overhead:
+
+```powershell
+uv run --python .venv researchclaw run --config local-win.minimal.yaml --topic "Your research idea" --auto-approve
 ```
 
 Output → `artifacts/rc-YYYYMMDD-HHMMSS-<hash>/deliverables/` — compile-ready LaTeX, BibTeX, experiment code, charts.
@@ -194,7 +112,7 @@ If you already use [OpenClaw](https://github.com/openclaw/openclaw) as your AI a
 2. OpenClaw reads `README.md` → understands installation and pipeline structure
 3. OpenClaw copies `config.researchclaw.example.yaml` → `config.yaml`
 4. Asks for your LLM API key (or uses your environment variable)
-5. Runs `pip install -e .` + `researchclaw run --topic "..." --auto-approve`
+5. Runs `uv pip install --python .venv -e .` + `uv run --python .venv researchclaw run --topic "..." --auto-approve`
 6. Returns the paper, LaTeX, experiments, and citations
 
 </details>
@@ -248,7 +166,7 @@ researchclaw run --config config.yaml --topic "Your research idea" --auto-approv
 
 | Method | How |
 |--------|-----|
-| **Standalone CLI** | `researchclaw setup` → `researchclaw init` → `researchclaw run --topic "..." --auto-approve` |
+| **Standalone CLI** | `uv run --python .venv researchclaw setup` → `uv run --python .venv researchclaw init` → `uv run --python .venv researchclaw run --topic "..." --auto-approve` |
 | **Python API** | `from researchclaw.pipeline import Runner; Runner(config).run()` |
 | **Claude Code** | Reads `RESEARCHCLAW_CLAUDE.md` — just say *"Run research on [topic]"* |
 | **Copilot CLI** | `researchclaw run --topic "..."` with `llm.acp.agent: "gh"` |
@@ -311,7 +229,7 @@ Phase D: Experiment Design         Phase H: Finalization
 | **📚 Multi-Source Literature** | Real papers from OpenAlex, Semantic Scholar & arXiv — query expansion, deduplication, circuit breaker with graceful degradation |
 | **🔍 4-Layer Citation Verification** | arXiv ID check → CrossRef/DataCite DOI → Semantic Scholar title match → LLM relevance scoring. Hallucinated refs auto-removed. |
 | **🖥️ Hardware-Aware Execution** | Auto-detects GPU (NVIDIA CUDA / Apple MPS / CPU-only) and adapts code generation, imports, and experiment scale accordingly |
-| **🦾 OpenCode Beast Mode** | Complex experiments auto-routed to [OpenCode](https://github.com/anomalyco/opencode) — generates multi-file projects with custom architectures, training loops, and ablation studies. Install via `researchclaw setup`. |
+| **🦾 OpenCode Beast Mode** | Complex experiments auto-routed to [OpenCode](https://github.com/anomalyco/opencode) — generates multi-file projects with custom architectures, training loops, and ablation studies. Install via `uv run --python .venv researchclaw setup`. |
 | **🧪 Sandbox Experiments** | AST-validated code, immutable harness, NaN/Inf fast-fail, self-healing repair, iterative refinement (up to 10 rounds), partial result capture |
 | **📝 Conference-Grade Writing** | NeurIPS/ICML/ICLR templates, section-by-section drafting (5,000-6,500 words), anti-fabrication guard, revision length guard, anti-disclaimer enforcement |
 | **📐 Template Switching** | `neurips_2025`, `iclr_2026`, `icml_2026` — Markdown → LaTeX with math, tables, figures, cross-refs, `\cite{}` |
@@ -451,7 +369,7 @@ experiment:
     host: ""                       # GPU server hostname
     gpu_ids: []                    # Available GPU IDs
     remote_workdir: "/tmp/researchclaw_experiments"
-  opencode:                          # OpenCode Beast Mode (auto-installed via `researchclaw setup`)
+  opencode:                          # OpenCode Beast Mode (auto-installed via `uv run --python .venv researchclaw setup`)
     enabled: true                    # Master switch (default: true)
     auto: true                       # Auto-trigger without confirmation (default: true)
     complexity_threshold: 0.2        # 0.0-1.0 — higher = only trigger on complex experiments

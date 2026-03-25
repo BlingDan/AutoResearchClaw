@@ -2638,6 +2638,7 @@ def _execute_citation_verify(
         )
 
     s2_api_key = getattr(config.llm, "s2_api_key", "") or ""
+    s2_base_url = getattr(config.llm, "s2_base_url", "") or ""
 
     from researchclaw.literature.verify import parse_bibtex_entries
     _n_entries = len(parse_bibtex_entries(bib_text))
@@ -2646,7 +2647,11 @@ def _execute_citation_verify(
         "(DOI→CrossRef > OpenAlex > arXiv > S2)…",
         _n_entries,
     )
-    report = verify_citations(bib_text, s2_api_key=s2_api_key)
+    report = verify_citations(
+        bib_text,
+        s2_api_key=s2_api_key,
+        s2_base_url=s2_base_url,
+    )
     logger.info(
         "[citation-verify] Done: %d verified, %d suspicious, "
         "%d hallucinated, %d skipped (integrity: %.0f%%)",

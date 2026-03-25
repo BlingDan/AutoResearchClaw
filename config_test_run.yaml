@@ -37,9 +37,10 @@ openclaw_bridge:
 
 llm:
   provider: "openai-compatible"
-  base_url: "https://openai-api.shenmishajing.workers.dev/v1"
-  api_key: "r685RxDQ3lYYWC8nOH5SUDlLZEkutddM"
+  base_url: "https://novazacary.top/v1"
+  api_key: ""
   api_key_env: "RESEARCHCLAW_API_KEY"
+  s2_base_url: "https://ai4scholar.net"
   primary_model: "gpt-4o"
   fallback_models:
     - "gpt-4.1"
